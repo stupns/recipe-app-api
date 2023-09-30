@@ -9,3 +9,13 @@ docker-compose down
 docker-compose run --rm app sh -c "python manage.py startapp core"
 
 docker-compose run --rm app sh -c "python manage.py wait_for_db"
+
+____________
+docker volume ls
+
+docker-compose down
+
+docker volume rm recipe-app-api_dev-db-data
+
+docker exec -it recipe-app-api-db-1 bash
+docker-compose run --rm app sh -c "python manage.py migrate core"
