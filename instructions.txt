@@ -19,3 +19,6 @@ docker volume rm recipe-app-api_dev-db-data
 
 docker exec -it recipe-app-api-db-1 bash
 docker-compose run --rm app sh -c "python manage.py migrate core"
+
+____
+
