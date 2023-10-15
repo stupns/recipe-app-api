@@ -67,7 +67,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
         return queryset.filter(
             user=self.request.user
         ).order_by('-id').distinct()
-        # return self.queryset.filter(user=self.request.user).order_by('-id') - olds
+# return self.queryset.filter(user=self.request.user).order_by('-id') - olds
 
     def get_serializer_class(self):
         """Return the serializer class for request."""
@@ -125,7 +125,7 @@ class BaseRecipeAttrViewSet(mixins.UpdateModelMixin,
         return queryset.filter(
             user=self.request.user
         ).order_by('-name').distinct()
-        # return self.queryset.filter(user=self.request.user).order_by('-name') old
+# return self.queryset.filter(user=self.request.user).order_by('-name') old
 
 
 class TagViewSet(BaseRecipeAttrViewSet):
