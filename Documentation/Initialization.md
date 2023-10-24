@@ -1,0 +1,189 @@
+# Project Setup
+
+## Docker Hub and Django
+
+https://hub.docker.com/settings/security
+___
+
+Step 1. Account Settings > Security > Access Tokens:
+ - New Access Token: "recipe-app-api"
+ - copy token *
+
+Step 2. Open github repository > Settings > Secrets:
+ * New Repository secrets: 
+   - name: DOCKERHUB_USER
+   - value: stupns
+
+   - name: DOCKERHUB_TOKEN
+   - value: paste token*
+
+
+## Docker and Django
+___
+### Define Python requirements
+
+**Step 1.** Create requirements.txt:
+
+```text
+Django>=3.2.4,<3.3
+djangorestframework>=3.12.4,<3.13
+flake8>=3.9.2,<3.10
+psycopg2>=2.8.6,<2.9
+drf-spectacular>=0.15.1,<0.16
+Pillow>=8.2.0,<8.3.0
+uwsgi>=2.0.19,<2.1
+```
+### Create project Dockerfile
+
+**Step 1.** Dockerfile:
+
+```dockerfile
+FROM python:3.9-alpine3.13
+LABEL maintainer="stupns"
+
+ENV PYTHONUNBUFFERED 1
+
+COPY ./requirements.txt /tmp/requirements.txt
+COPY ./app /app
+WORKDIR /app
+EXPOSE 8000
+
+
+RUN python -m venv /py && \
+    /py/bin/pip install --upgrade pip && \
+    /py/bin/pip install -r /tmp/requirements.txt && \
+    rm -rf /tmp && \
+    adduser \
+        --disabled-password \
+        --no-create-home \
+        django-user 
+
+ENV PATH="/py/bin:$PATH"
+
+USER django-user
+
+```
+
+**Step 2.** .dockerignore:
+
+```dockerignore
+# GIT
+.gitignore
+.git
+
+#Docker
+.docker
+
+#Python
+app/__pycache__/
+app/*/__pycache__/
+app/*/*/__pycache__/
+app/*/*/*/__pycache__/
+.env/
+.venv/
+venv/
+```
+
+**Step 3.** Build docker
+
+```commandline
+% docker build .
+
+... Successfull!
+```
+
+### Create Docker Compose
+**Step 4.** Create docker-compose.yml:
+```dockerfile
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app
+    command: >
+      sh -c "python manage.py  runserver 0.0.0.0:8000"
+```
+
+### Flake8
+
+**Step 5.** In docker-compose-yml:
+```dockerfile
+    ...
+      context: .
+      args:
+        - DEV=true
+    ports:
+      - "8000:8000"
+    ...
+```
+
+in Dockerfile:
+```dockerfile
+...
+COPY ...
+COPY ./requirements.dev.txt /tmp/requirements.dev.txt
+...
+
+ARG DEV=false
+RUN python -m venv /py && \
+...
+    if [ $DEV = "true" ]; \
+      then /py/bin/pip install -r /tmp/requirements.dev.txt ; \
+    fi && \
+    rm -rf /tmp && \
+```
+
+**Step 5.** Update requirements.dev.txt:
+```text
+flake8>=3.9.2,<3.10
+```
+```commandline
+% docker-compose build
+...
+Successfull!
+```
+**Step 6.** Need create .flake8 in app folder:
+
+```commandline
+recipe-app-api % cd app
+recipe-app-api/app % cat .flake8
+```
+.flake8:
+
+```text
+
+[flake8]
+exclude =
+  migrations,
+  __pycache__,
+  manage.py,
+  settings.py
+```
+
+**Step 7.** Run flake8:
+
+```commandline
+recipe-app-api/app % cd .. & docker-compose run --rm app sh -c "flake8"
+
+Creating recipe-app-api_app_run ... done
+```
+
+### Creating Django project
+
+**Step 8.** Run command creating project:
+```commandline
+% docker-compose run --rm app sh -c "django-admin startproject app ."
+
+Creating recipe-app-api_app_run ... done
+```
+**Step 9.** Run project with Docker Compose:
+```commandline
+% docker-compose up
+```
+
+http://127.0.0.1:8000 - Well done.
