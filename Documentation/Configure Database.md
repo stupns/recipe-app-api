@@ -140,3 +140,34 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS('Database available!'))
 ```
+
+So, when u enter next command, u see :
+```commandline
+docker-compose run --rm app sh -c "python manage.py wait_for_db"
+
+...
+ ✔ Container recipe-app-api-db-1  Started                                                                                                                                                                                                                      0.9s 
+[+] Building 0.0s (0/0)                                                                                                                                                                                                                        docker:desktop-linux
+Waiting for database ...
+Database available!
+```
+
+## Step 6. Update Docker Compose and CI/CD
+
+In checks.yml need update line for `wait_for_db`:
+```yaml
+---
+...
+        run: docker-compose run --rm app sh -c "python manage.py wait_for_db && python manage.py test"
+...
+```
+
+Update the line in docker-compose.yml related to database migration and checking for availability:
+
+```yaml
+    ...
+    command: >
+      sh -c "python manage.py wait_for_db && 
+             python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+```  

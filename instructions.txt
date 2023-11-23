@@ -20,8 +20,22 @@ docker volume rm recipe-app-api_dev-db-data
 docker exec -it recipe-app-api-db-1 bash
 docker-compose run --rm app sh -c "python manage.py migrate core"
 
-____
+_______
+https://us-east-2.console.aws.amazon.com/ec2/home?region=us-east-2#Instances:
 
+ssh-keygen -t rsa -b 4098
+/Users/admin/.ssh/aws_id_rsa
+ssh-add aws_id_rsa
+
+EC2> Key pairs > Import key pair:
+stupns-local-machine
+*enter-ssn
+
+In console:
+chmod 400 aws_id_rsa
+ssh -i "aws_id_rsa" ec2-user@ec2-18-189-193-100.us-east-2.compute.amazonaws.com
+
+_______
 ssh ec2-user@3.139.233.207
 
 *inside server console*

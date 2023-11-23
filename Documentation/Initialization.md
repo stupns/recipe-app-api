@@ -173,6 +173,8 @@ recipe-app-api/app % cd .. & docker-compose run --rm app sh -c "flake8"
 Creating recipe-app-api_app_run ... done
 ```
 
+> **TIP:** that passed any error in flake8 : use `# noqa` after code
+> 
 ### Creating Django project
 
 **Step 8.** Run command creating project:
