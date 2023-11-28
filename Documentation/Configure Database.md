@@ -171,3 +171,10 @@ Update the line in docker-compose.yml related to database migration and checking
              python manage.py migrate &&
              python manage.py runserver 0.0.0.0:8000"
 ```  
+
+____
+> **Commits:**
+> 
+> https://github.com/stupns/recipe-app-api/commit/34354236c875cff851fa20c1fd3a95ba04fc234a
+> https://github.com/stupns/recipe-app-api/commit/34354236c875cff851fa20c1fd3a95ba04fc234a
+ 
