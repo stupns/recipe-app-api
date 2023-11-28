@@ -138,3 +138,12 @@ def create_superuser(self, email, password):
 
     return user
 ```
+
+____
+> **Commits:**
+>
+> https://github.com/stupns/recipe-app-api/commit/632860f
+> 
+> https://github.com/stupns/recipe-app-api/commit/65efed4
+
+ 
