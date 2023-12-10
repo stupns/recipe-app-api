@@ -1,0 +1,455 @@
+[ <-- 5. Api Documentation ](Api%20Documentation.md)
+# 5. Build User Api
+This guide outlines the steps to build and implement a User API in a Django project.
+
+___
+## Step 1. Create user app
+
+First, create a new user application using Docker Compose:
+
+```commandline
+docker-compose run --rm app sh -c "python manage.py startapp user"
+```
+Once the app is created, clean up by removing the following unnecessary files:
+- `admin.py`
+- `models.py`
+- `tests.py`
+
+Then, create a new folder named tests and add the following files:
+- `__init__.py`
+- `test_user_api.py`
+
+Finally, register the new user app in your project settings:
+
+```python
+INSTALLED_APPS = [
+    ...,
+    'user',
+]
+```
+
+## Step 2. Write User Creation Tests
+
+In the file tests_user_api.py, write tests for the user creation API. The tests should cover scenarios such as
+successful user creation, handling existing users, and validating password length.
+
+Example test code:
+```python
+"""
+Tests for the user API.
+"""
+from django.test import TestCase
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+
+from rest_framework.test import APIClient
+from rest_framework import status
+
+CREATE_USER_URL = reverse('user:create')
+
+def create_user(**params):
+    """Create and return a new user."""
+    return get_user_model().objects.create_user(**params)
+
+class PublicUserApiTests(TestCase):
+    """Tests the public features of the user api."""
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_create_user_success(self):
+        """Test creating a user is successful"""
+        payload = {
+            'email': 'test@example.com',
+            'password': 'testpass123',
+            'name': 'Test Name',
+        }
+        res = self.client.post(CREATE_USER_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        user = get_user_model().objects.get(email=payload['email'])
+        self.assertTrue(user.check_password(payload['password']))
+        self.assertNotIn('password', res.data)
+        
+    def test_user_with_email_exists_error(self):
+        """Test error returned if user with email exists."""
+        payload = {
+            'email': 'test@example.com',
+            'password': 'testpass123',
+            'name': 'Test Name',
+        }
+        create_user(**payload)
+        res = self.client.post(CREATE_USER_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        
+    def test_password_too_short_error(self):
+        """Test an error is returned if password less than 5 chars."""
+        payload = {
+            'email': 'test@example.com',
+            'password': 'pw',
+            'name': 'Test name',
+        }
+
+        res = self.client.post(CREATE_USER_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        user_exists = get_user_model().objects.filter(
+            email=payload['email']
+        ).exists()
+        self.assertFalse(user_exists)
+
+```
+
+## Step 3. Implement User Creation API
+
+Create a new file serializers.py to define the user serializer:
+
+```python
+# views.py (inside your user app)
+
+"""
+Serializers for the user API View.
+"""
+from django.contrib.auth import (
+    get_user_model,)
+
+from rest_framework import serializers
+
+
+class UserSerializer(serializers.ModelSerializer):
+    """Serializer for the user object."""
+
+    class Meta:
+        model = get_user_model()
+        fields = ['email', 'password', 'name']
+        extra_kwargs = {'password': {'write_only': True, 'min_length': 5}}
+
+    def create(self, validated_data):
+        """Created and return a user with encrypted password"""
+        return get_user_model().objects.create_user(**validated_data)
+
+```
+
+Next, update your views to include user creation functionality:
+
+
+```python
+from rest_framework import generics
+
+from .serializers import (
+    UserSerializer,
+)
+
+class CreateUserView(generics.CreateAPIView):
+    """Create a new user in the system."""
+    serializer_class = UserSerializer
+
+```
+
+Finally, define the URL path for user creation in your user app's urls.py:
+
+```python
+# urls.py (inside your user app)
+
+"""
+URL mappings for the user API.
+"""
+from django.urls import path
+
+from . import views
+
+app_name = 'user'
+
+urlpatterns = [
+    path('create/', views.CreateUserView.as_view(), name='create'),
+]
+```
+
+And include it in your project's main urls.py:
+
+```python
+# urls.py (your project's main URL configuration)
+
+    ...
+    path('api/user/', include('user.urls')),
+```
+
+This improved documentation offers a clear step-by-step guide for setting up a User API in a Django application,
+complete with code examples and descriptions.
+
+## Step 4. Write tests for token API
+
+To test the token generation process in your Django project, update the tests_user_api.py file with tests focusing on
+scenarios like successful token generation, handling invalid credentials, and blank passwords.
+
+Example test code snippet:
+
+```python
+# tests_user_api.py
+
+TOKEN_URL = reverse('user:token')
+
+    ...
+    def test_create_token_for_user(self):
+        """Test generates token for valid credentials."""
+        user_details = {
+            'name': 'Test name',
+            'email': 'test@example.com',
+            'password': 'test-user-password123',
+        }
+        create_user(**user_details)
+
+        payload = {
+            'email': user_details['email'],
+            'password': user_details['password'],
+        }
+        res = self.client.post(TOKEN_URL, payload)
+
+        self.assertIn('token', res.data)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_create_token_bad_credentials(self):
+        """Test returns error if credentials invalid."""
+        create_user(email='test@example.com', password='goodpass')
+        payload = {'email': 'test@example.com', 'password': 'badpass'}
+        res = self.client.post(TOKEN_URL, payload)
+
+        self.assertNotIn('token', res.data)
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_token_blank_password(self):
+        """Test posting a blank password returns an error."""
+        payload = {'email': 'test@example.com', 'password': ''}
+        res = self.client.post(TOKEN_URL, payload)
+
+        self.assertNotIn('token', res.data)
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+```
+
+## Step 5. Implement TokenAPI
+
+First, add the following line to your settings.py to enable token authentication:
+
+```python
+# settings.py
+
+INSTALLED_APPS = [
+    ...,
+    'rest_framework.authtoken',
+]
+```
+
+Then, in serializers.py, create a serializer for user authentication tokens:
+
+```python
+from django.contrib.auth import (
+    get_user_model,
+    authenticate,
+)
+from rest_framework import serializers
+from django.utils.translation import gettext as _
+
+# Other serializers...
+
+class AuthTokenSerializer(serializers.Serializer):
+    """Serializer for the user auth token."""
+    email = serializers.CharField()
+    password = serializers.CharField(
+        style={'input_type': 'password'},
+        trim_whitespace=False,
+    )
+
+    def validate(self, attrs):
+        """Validate and authenticate for user."""
+        email = attrs.get('email')
+        password = attrs.get('password')
+        user = authenticate(
+            request=self.context.get('request'),
+            username=email,
+            password=password,
+        )
+        if not user:
+            msg = _('Unable to authenticate with provided credentials.')
+            raise serializers.ValidationError(msg, code='authorization')
+
+        attrs['user'] = user
+        return attrs
+
+```
+
+Finally, update views.py to include the token creation view:
+
+```python
+# views.py
+
+from rest_framework.authtoken.views import ObtainAuthToken
+from rest_framework.settings import api_settings
+
+from .serializers import (
+    UserSerializer,
+    AuthTokenSerializer,
+)
+
+# Other views...
+
+class CreateTokenView(ObtainAuthToken):
+    """Create a new auth token for user."""
+    serializer_class = AuthTokenSerializer
+    renderer_classes = api_settings.DEFAULT_RENDERER_CLASSES
+```
+
+And update app>user>urls.py to include the token URL:
+
+```python
+# urls.py (inside your user app)
+
+    ...
+    path('token/', views.CreateTokenView.as_view(), name='token'),
+]
+```
+
+With these steps, you'll have implemented and tested a Token API, allowing users to authenticate and receive tokens
+for subsequent secure requests in your Django application.
+
+## Step 6. Write tests for manage user API
+
+To ensure the manage user API works correctly, you will extend the test_user_api.py file with tests that cover
+retrieving and updating user profiles. These tests will include scenarios for both authenticated (private) and
+unauthenticated (public) users.
+
+Here's how you can structure these tests:
+
+```python
+# tests_user_api.py
+
+...
+ME_URL = reverse('user:me')
+
+    ...
+
+    def test_retrieve_user_unauthorized(self):
+        """Test authentication is required for users."""
+        res = self.client.get(ME_URL)
+
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+class PrivateUserApiTests(TestCase):
+    """test API requests that require authentication."""
+
+    def setUp(self):
+        self.user = create_user(
+            email='test@example.com',
+            password='testpass123',
+            name='Test Name',
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_retrieve_profile_success(self):
+        """Test retrieving profile for logged in user."""
+        res = self.client.get(ME_URL)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK),
+        self.assertEqual(res.data, {
+            'name': self.user.name,
+            'email': self.user.email,
+        })
+
+    def test_post_me_not_allowed(self):
+        """Test POST is not allowed for to me endpoint."""
+        res = self.client.post(ME_URL, {})
+
+        self.assertEqual(res.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+        def test_update_user_profile(self):
+        """Test updating the user for the authenticated user."""
+        payload = {'name': 'Updated name', 'password': 'newpassword123'}
+
+        res = self.client.patch(ME_URL, payload)
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.name, payload['name'])
+        self.assertTrue(self.user.check_password(payload['password']))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+```
+
+These tests cover crucial aspects of user management, including:
+
+- Verifying that unauthenticated requests are denied access to user profiles.
+- Ensuring that authenticated users can retrieve their profile information.
+- Testing that POST requests are not allowed to the profile endpoint.
+- Checking the functionality of updating user profiles for authenticated users.
+
+This comprehensive testing approach will help ensure the robustness and security of your user management API.
+
+## Step 7. Implement manage user API
+
+To implement the manage user API in your Django project, you will update the serializers.py, views.py, and the user 
+app's urls.py. This will allow authenticated users to retrieve and update their profile information.
+
+
+Update serializers.py
+In serializers.py, you need to modify the UserSerializer to handle user updates, particularly the password update logic:
+
+```python
+# serializers.py
+
+class UserSerializer(serializers.ModelSerializer):
+    """Serializer for the user object."""
+
+    # Existing fields and methods...
+
+    def update(self, instance, validated_data):
+        """Update and return user."""
+        password = validated_data.pop('password', None)
+        user = super().update(instance, validated_data)
+
+        if password:
+            user.set_password(password)
+            user.save()
+
+        return user
+```
+
+**Update views.py**
+
+In views.py, create a view that allows authenticated users to retrieve and update their profile:
+
+```python
+# views.py
+from rest_framework import generics, authentication, permissions
+
+# Other views...
+
+class ManageUserView(generics.RetrieveUpdateAPIView):
+    """Manage the authenticated user."""
+    serializer_class = UserSerializer
+    authentication_classes = [authentication.TokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        """Retrieve and return the authenticated user."""
+        return self.request.user
+```
+
+**Update URLs in the User App**
+Finally, define the URL path for managing user profiles in your user app's urls.py:
+
+```python
+# urls.py (inside your user app)
+    # Other URL patterns...
+    path('me/', views.ManageUserView.as_view(), name='me'),
+]
+```
+
+With these changes, your Django application will now have a fully functional API for managing user profiles.
+Authenticated users will be able to retrieve and update their profile information securely.
+
+____
+> **Commits:**
+>
+> https://github.com/stupns/recipe-app-api/commit/9bdeab5
+> https://github.com/stupns/recipe-app-api/commit/e2b7f2f 
+> https://github.com/stupns/recipe-app-api/commit/87c4084

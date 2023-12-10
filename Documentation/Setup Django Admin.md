@@ -1,5 +1,7 @@
 [ <-- 4. Create User Model ](Create%20User%20Model.md)
 # 5. Setup Django Admin
+Customizing the Django admin interface enhances the management and usability of the user models in the Recipe App API 
+project. This documentation details the steps and rationale behind these customizations.
 ___
 ## Step 1. Write tests for listing users:
 
