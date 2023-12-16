@@ -36,7 +36,7 @@ class ModelTests(TestCase):
         )
 ```
 
-## Step 2 Implement recipe model
+## Step 2. Implement recipe model
 
 In app/core/models.py, define the Recipe model. This model will be used to store recipe details in your database.
 
@@ -87,21 +87,22 @@ Run the Docker command to create a new Django app named recipe:
 ```commandline
 docker-compose run --rm app sh -c "python manage.py startapp recipe"
 ```
-Clean Up Unnecessary Files
+**Clean Up Unnecessary Files**
 
 After creating the app, you'll need to remove some files that are not immediately necessary.
 Execute these commands in your project directory:
 
-- recipe/migrations.py
-- recipe/admin.py
-- recipe/models.py
-- recipe/tests.py
+- `recipe/migrations.py`
+- `recipe/admin.py`
+- `recipe/models.py`
+- `recipe/tests.py`
 
-Create a **tests** directory with an **___init__.py_** file inside the recipe app. This is where you'll later add your test files.
+Create a **tests** directory with an **___init__.py_** file inside the recipe app. This is where you'll later add your
+test files.
 
 Finally, add the recipe app to your Django project settings. This step is crucial for Django to recognize the app.
 
-Open your settings.py file and update the INSTALLED_APPS section:
+Open your **`settings.py`** file and update the INSTALLED_APPS section:
 ```python
 # settings.py
 
@@ -113,7 +114,7 @@ INSTALLED_APPS = [
 
 ## Step 4. Write tests for listing recipes
 
-Here is your provided test script for test_recipe_api.py, formatted and explained:
+Here is your provided test script for **`test_recipe_api.py`**, formatted and explained:
 
 ```python
 #test_recipe_api.py
@@ -208,16 +209,18 @@ class PrivateRecipeApiTests(TestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(res.data, serializer.data)
 ```
-Key Points:
-create_recipe: A helper function to create sample recipes.
-PublicRecipeAPITests: Tests to ensure that unauthenticated requests are not allowed.
-PrivateRecipeApiTests: Tests for authenticated requests, including checking that only recipes for the authenticated
-user are returned. This setup will help validate the core functionality of your recipe listing API, ensuring that it
+**Key Points:**
+- create_recipe: A helper function to create sample recipes.
+- **`PublicRecipeAPITests`**: Tests to ensure that unauthenticated requests are not allowed.
+- **`PrivateRecipeApiTests`**: Tests for authenticated requests, including checking that only recipes for the
+authenticated user are returned.
+
+- This setup will help validate the core functionality of your recipe listing API, ensuring that it
 behaves as expected under different scenarios.
 
 ## Step 5. Implement Recipe listing API
 
-In your recipe app, create a serializers.py file for the recipe model:
+In your recipe app, create a **`serializers.py`** file for the recipe model:
 
 ```python
 # serializers.py
@@ -242,9 +245,9 @@ class RecipeSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
 ```
 
-Next, define the view for your recipe API. Make sure to use the correct serializer for the RecipeViewSet. It seems like
-you mentioned RecipeDetailSerializer, which might be a detailed version of the recipe serializer. Ensure that you have
-this serializer defined in your serializers.py or use RecipeSerializer if that's not the case.
+Next, define the view for your recipe API. Make sure to use the correct serializer for the `RecipeViewSet`. It seems like
+you mentioned `RecipeDetailSerializer`, which might be a detailed version of the recipe serializer. Ensure that you have
+this serializer defined in your serializers.py or use `RecipeSerializer` if that's not the case.
 
 ```python
 # recipe/views.py
@@ -321,9 +324,9 @@ integrated for the API to function smoothly.
 
 ## Step 6. Write tests for recipe details API
 
-To test the recipe details API in your Django project, you'll need to update test_recipe_api.py. This test will ensure
+To test the recipe details API in your Django project, you'll need to update `test_recipe_api.py`. This test will ensure
 that the API correctly retrieves the details of a specific recipe. Before you begin, make sure that you have defined the
-RecipeDetailSerializer in your serializers.py.
+**RecipeDetailSerializer** in your serializers.py.
 
 Here's the updated code for your test file:
 
@@ -352,10 +355,10 @@ class PrivateRecipeApiTests(TestCase):
 ```
 **Key Points:**
 
-- detail_url(recipe_id): A helper function to create a URL for the recipe detail view. Make sure the URL name
+- **`detail_url(recipe_id)`**: A helper function to create a URL for the recipe detail view. Make sure the URL name
 (recipe:recipe-detail) matches the one defined in your URL configurations.
-- test_get_recipe_detail: This test ensures that the recipe detail view returns the correct data for a given recipe. It uses RecipeDetailSerializer to serialize the data
-for comparison. 
+- **`test_get_recipe_detail`**: This test ensures that the recipe detail view returns the correct data for a given
+recipe. It uses RecipeDetailSerializer to serialize the data for comparison. 
 
 With these tests, you can validate the functionality of your recipe detail API, ensuring it correctly
 retrieves detailed information for individual recipes. Remember to run your tests after implementing the corresponding
@@ -363,10 +366,11 @@ API view to verify that everything is working as expected.
 
 ## Step 7. Implement recipe detail API
 
-To implement the recipe detail API, you'll extend the functionality in recipe/serializers.py and recipe/views.py. Here's how you can do it:
+To implement the recipe detail API, you'll extend the functionality in `recipe/serializers.py` and recipe/views.py.
+Here's how you can do it:
 
-Update recipe/serializers.py
-First, extend the RecipeSerializer to create a RecipeDetailSerializer for detailed recipe information. 
+**Update `recipe/serializers.py`**
+First, extend the **RecipeSerializer** to create a **RecipeDetailSerializer** for detailed recipe information. 
 This serializer will include additional fields, such as description, which may not be needed in the list view.
 
 ```python
@@ -380,9 +384,9 @@ class RecipeDetailSerializer(RecipeSerializer):
 ```
 
 **Update recipe/views.py**
-Next, update the RecipeViewSet in views.py to use the correct serializer based on the action. In your case, you want
+Next, update the **RecipeViewSet** in views.py to use the correct serializer based on the action. In your case, you want
 to use the RecipeDetailSerializer for the retrieve action (which corresponds to getting recipe details)
-and RecipeSerializer for the list action.
+and **RecipeSerializer** for the list action.
 
 ```python
 # recipe/views.py
@@ -400,10 +404,10 @@ class RecipeViewSet(viewsets.ModelViewSet):
         return self.serializer_class
 ```
 **Considerations:**
-- Ensure that the get_serializer_class method in RecipeViewSet correctly returns RecipeDetailSerializer for the retrieve
-action and RecipeSerializer for other actions like list.
-- You have used self.serializer_class in your code snippet, but it's not necessary in this context since the method 
- get_serializer_class handles the selection of the appropriate serializer.
+- Ensure that the get_serializer_class method in **RecipeViewSet** correctly returns **RecipeDetailSerializer** for 
+the retrieve action and **RecipeSerializer** for other actions like list.
+- You have used `self.serializer_class` in your code snippet, but it's not necessary in this context since the method 
+ `get_serializer_class` handles the selection of the appropriate serializer.
 - These updates will allow your API to return detailed recipe information when retrieving a single recipe and a more
  concise representation when listing multiple recipes.
 
@@ -413,7 +417,7 @@ recipes while maintaining efficient, less detailed responses for recipe lists.
 ## Step 8. Write tests for creating recipes.
 
 To test the functionality of creating recipes through your API, you'll add a new test method to the 
-PrivateRecipeApiTests class in test_recipe_api.py. This test will ensure that authenticated users can successfully
+**PrivateRecipeApiTests** class in `test_recipe_api`.py. This test will ensure that authenticated users can successfully
 create new recipes and that the created recipes have the correct data and are associated with the correct user.
 
 Here's how you can implement this test:
@@ -445,10 +449,11 @@ class PrivateRecipeApiTests(TestCase):
 # Additional test methods...
 ```
 **Key Points:**
-- `test_create_recipe:` This test method sends a POST request to the recipe creation endpoint with a payload containing
-recipe data. It then checks if the recipe is created successfully (status.HTTP_201_CREATED), verifies that the data in 
-the created recipe matches the sent payload, and confirms that the recipe is associated with the correct user.
-- `RECIPES_URL:` Ensure that this variable correctly points to your recipe creation endpoint.
+- `**test_create_recipe**:` This test method sends a POST request to the recipe creation endpoint with a payload 
+containing recipe data. It then checks if the recipe is created successfully (status.HTTP_201_CREATED), verifies 
+that the data in the created recipe matches the sent payload, and confirms that the recipe is associated with the 
+correct user.
+- `**RECIPES_URL**:` Ensure that this variable correctly points to your recipe creation endpoint.
 
 With this test, you will be able to verify that your recipe creation API endpoint functions correctly,
 allowing authenticated users to create new recipes. Remember to run your tests regularly to ensure the API is working 
@@ -456,8 +461,9 @@ as expected throughout the development process.
 
 ## Step 9. Implement create Recipe API
 
-To enable the creation of recipes through your API, you will need to update the RecipeViewSet in views.py of your recipe
-app. Specifically, you'll override the perform_create method to ensure that the recipe is associated with the user who
+To enable the creation of recipes through your API, you will need to update the **RecipeViewSet** in views.py of your 
+recipe app. Specifically, you'll override the perform_create method to ensure that the recipe is associated with the
+user who
 creates it.
 
 Here's how you can implement this in your views.py:
@@ -474,7 +480,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 ```
 
-Key Points:
+**Key Points:**
 - **`perform_create`**: This method is overridden to associate the newly created recipe with the user who is making
 the request.The `**serializer.save(user=self.request.user)**` call ensures that the `**user**` field of the recipe is
 set to the current user.
@@ -491,6 +497,7 @@ These tests cover partial and full updates of recipes, deletion, and unauthorize
 users. Let's break down these test cases:
 
 **Test for Partial Update of a Recipe**
+
 This test ensures that a PATCH request to a recipe URL updates the specified fields while leaving others unchanged.
 
 ```python
@@ -548,7 +555,8 @@ class PrivateRecipeApiTests(TestCase):
 ```
 
 **Test for Full Update of a Recipe**
-This test checks if a PUT request to a recipe URL updates all the fields of a recipe.
+
+This test checks if a **PUT** request to a recipe URL updates all the fields of a recipe.
 ```python
     def test_full_update(self):
         """Test full update of recipe."""
@@ -576,6 +584,7 @@ This test checks if a PUT request to a recipe URL updates all the fields of a re
         self.assertEqual(recipe.user, self.user)
 ```
 **Test to Prevent Unauthorized User Update**
+
 This test ensures that a recipe's user field cannot be changed via the API.
 ```python
     def test_update_user_returns_error(self):
@@ -591,7 +600,8 @@ This test ensures that a recipe's user field cannot be changed via the API.
         self.assertEqual(recipe.user, self.user)
 ```
 **Test for Deleting a Recipe**
-This test confirms that a DELETE request to a recipe URL deletes the recipe.
+
+This test confirms that a **DELETE** request to a recipe URL deletes the recipe.
 ```python
     def test_delete_recipe(self):
         """Test deleting a recipe successful."""
@@ -607,6 +617,7 @@ This test confirms that a DELETE request to a recipe URL deletes the recipe.
 
 ```
 **Test to Prevent Deleting Others' Recipes**
+
 This test ensures that a user cannot delete a recipe created by another user.
 ```python
     def test_recipe_others_recipe_error(self):
@@ -623,8 +634,8 @@ This test ensures that a user cannot delete a recipe created by another user.
 
 **Additional Notes**
 - Make sure to import all necessary modules and classes at the beginning of the file.
-- Remember to define the create_user and create_recipe helper functions if they are not already defined.
-- Verify that your URL names in detail_url match those defined in your Django URL configurations.
+- Remember to define the `**create_user**` and `**create_recipe**` helper functions if they are not already defined.
+- Verify that your URL names in `detail_url` match those defined in your Django URL configurations.
 
 With these tests, you will comprehensively cover various scenarios for managing recipes, ensuring your API behaves
 correctly in terms of data integrity and access control.
@@ -632,8 +643,8 @@ correctly in terms of data integrity and access control.
 ____
 > **Commits:**
 >* https://github.com/stupns/recipe-app-api/commit/7383b20 (origin/br-7-build-recipe-api) Build a recipe api.
->* 
+>
 >* https://github.com/stupns/recipe-app-api/commit/f119dc0 Build a recipe api.
->* 
+>
 >* https://github.com/stupns/recipe-app-api/commit/95f5fed Build a recipe api.
 
