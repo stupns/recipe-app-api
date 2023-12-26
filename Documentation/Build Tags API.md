@@ -356,7 +356,6 @@ With this implementation, your Tags API will now support updating tags, allowing
 modify existing tags' details. After making these changes, be sure to test your API to ensure that the
 update functionality is working correctly and securely.
 
-
 ## Step 6. Write tests for deleting tags
 
 Test for deleting tags is a crucial part of ensuring the robustness of your Tags API. It verifies
@@ -435,3 +434,289 @@ are correctly set to protect your API endpoints.
 With these changes, your Tags API will now support deleting tags, allowing users to manage their tags more
 effectively. After making these updates, test your API to ensure that the delete functionality is working correctly
 and that tags can be securely removed by authorized users.
+
+## Step 8. Writing Tests for Creating Recipes with Tags
+
+Writing tests for creating recipes with new and existing tags is a crucial step in ensuring the functionality of your
+Tags API. Here's a breakdown of the test cases you've outlined:
+
+**Test for Creating a Recipe with New Tags**
+
+This test checks if a recipe can be created with new tags. It sends a payload with a recipe and new tag names,
+then verifies if the recipe and tags are created correctly.
+
+```python
+#recipe/tests/test_recipe_api.py
+from core.models import (
+    Recipe,
+    Tag,
+)
+# Other imports and test cases...
+
+class PrivateRecipeApiTests(TestCase):
+    """Test authenticated API requests."""
+    
+    # Others test methods...
+
+    def test_create_recipe_with_new_tags(self):
+        """Tst creating a recipe with new tags."""
+        payload = {
+            'title': 'Thai Prawn Curry',
+            'time_minutes': 30,
+            'price': Decimal('2.25'),
+            'tags': [{'name': 'Thai'}, {'name': 'Dinner'}]
+        }
+        res = self.client.post(RECIPES_URL, payload, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        recipes = Recipe.objects.filter(user=self.user)
+        self.assertEqual(recipes.count(), 1)
+        recipe = recipes[0]
+        self.assertEqual(recipe.tags.count(), 2)
+        for tag in payload['tags']:
+            exists = recipe.tags.filter(
+                name=tag['name'],
+                user=self.user,
+            ).exists()
+            self.assertTrue(exists)
+```
+**Test for Creating a Recipe with Existing Tags**
+
+This test verifies if a recipe can be created using a combination of new and existing tags. It ensures that the API
+doesn't create duplicate tags and correctly associates them with the recipe.
+```python
+    def test_create_with_existing_tags(self):
+        """Test creating a recipe with existing tag."""
+        tag_indian = Tag.objects.create(user=self.user, name='Indian')
+        payload = {
+            'title': 'Pongal',
+            'time_minutes': 60,
+            'price': Decimal('4.50'),
+            'tags': [{'name': 'Indian'}, {'name': 'Breakfast'}]
+        }
+        res = self.client.post(RECIPES_URL, payload, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        recipes = Recipe.objects.filter(user=self.user)
+        self.assertEqual(recipes.count(), 1)
+        recipe = recipes[0]
+        self.assertEqual(recipe.tags.count(), 2)
+        self.assertIn(tag_indian, recipe.tags.all())
+        for tag in payload['tags']:
+            exists = recipe.tags.filter(
+                name=tag['name'],
+                user=self.user,
+            ).exists()
+            self.assertTrue(exists)
+```
+**Key Points**
+
+- Ensure you have set up the `**RECIPE_URL**` correctly, pointing to the recipe creation endpoint.
+- These tests will validate whether your API can handle the creation of recipes with both new and existing tags, which is
+a fundamental part of recipe and tag management.
+- The tests check both the creation of tags and their correct association with the created recipe.
+- Remember to import `**Decimal**` and other necessary modules at the beginning of your test file.
+
+By implementing these tests, you will ensure that your API behaves correctly when handling recipes with tags,
+maintaining data integrity and providing the necessary functionality for recipe-tag management.
+
+## Step 9. Implementing Create Tag Feature in Recipe Serializer
+
+You're on the right track with your implementation of the create tag feature in the `**RecipeSerializer**`. This 
+feature willallow users to create recipes and associate them with new or existing tags. Here's how your implementation
+looks and some suggestions for potential optimizations:
+
+```python
+#recipe/serializers.py
+
+class RecipeSerializer(serializers.ModelSerializer):
+    """Serializer for recipes."""
+    tags = TagSerializer(many=True, required=False)
+
+    class Meta:
+        model = Recipe
+        fields = [
+            'id', 'title', 'time_minutes', 'price', 'link', 'tags',
+        ]
+        read_only_fields = ['id']
+
+    def create(self, validated_data):
+        """Create a recipe."""
+        tags = validated_data.pop('tags', [])
+        recipe = Recipe.objects.create(**validated_data)
+        #self._get_or_create_tags(tags, recipe) -> next optimize code
+        auth_user = self.context['request'].user
+        for tag in tags:
+            tag_obj, created = Tag.objects.get_or_create(
+                user=auth_user,
+                **tag,
+            )
+            recipe.tags.add(tag_obj)
+        return recipe
+```
+
+**Key Points and Suggestions**
+
+- The `**tags**` field in `**RecipeSerializer**` is set up to handle a list of tags. It uses the `**TagSerializer**` for each tag
+in the list.
+- In the `**create**` method, tags are extracted from `**validated_data**`, and for each tag, you're either getting an
+existing tag or creating a new one, associated with the recipe's user.
+- The `**get_or_create**` method helps to avoid creating duplicate tags for the same user.
+- The `**recipe.tags.add(tag_obj)**` method is used to associate the tag with the recipe.
+
+With these implementations, your API will support creating recipes with new or existing tags, enhancing the
+functionality and user experience of your recipe management system.
+
+## Step 10. Writing Tests for Updating Recipe Tags
+
+**Test for Creating a Tag on Recipe Update**
+This test ensures that a new tag can be added to a recipe during an update operation.
+
+```python
+#recipe/tests/test_recipe_api.py
+
+# Other imports and test cases...
+
+class PrivateRecipeApiTests(TestCase):
+    """Test authenticated API requests."""
+    
+    # Others test methods...
+
+    def test_create_tag_on_update(self):
+        """Test creating tag when updating a recipe."""
+        recipe = create_recipe(user=self.user)
+
+        payload = {'tags': [{'name': 'Lunch'}]}
+        url = detail_url(recipe.id)
+        res = self.client.patch(url, payload, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        new_tag = Tag.objects.get(user=self.user, name='Lunch')
+        self.assertIn(new_tag, recipe.tags.all())
+```
+**Test for Assigning an Existing Tag on Recipe Update**
+
+This test verifies that an existing tag can be assigned to a recipe, and ensures that previously assigned tags are
+replaced.
+```python
+     
+    def test_update_recipe_assign_tag(self):
+        """Test assigning an existing tag when updating a recipe."""
+        tag_breakfast = Tag.objects.create(user=self.user, name='Breakfast')
+        recipe = create_recipe(user=self.user)
+        recipe.tags.add(tag_breakfast)
+
+        tag_lunch = Tag.objects.create(user=self.user, name='Lunch')
+        payload = {'tags': [{'name': 'Lunch'}]}
+        url = detail_url(recipe.id)
+        res = self.client.patch(url, payload, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn(tag_lunch, recipe.tags.all())
+        self.assertNotIn(tag_breakfast, recipe.tags.all())
+```
+**Test for Clearing Recipe Tags**
+
+This test checks if the tags of a recipe can be completely cleared.
+```python
+
+    def test_clear_recipe_tags(self):
+        """Test clearing a recipes tags."""
+        tag = Tag.objects.create(user=self.user, name='Desert')
+        recipe = create_recipe(user=self.user)
+        recipe.tags.add(tag)
+
+        payload = {'tags': []}
+        url = detail_url(recipe.id)
+        res = self.client.patch(url, payload, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(recipe.tags.count(), 0)
+```
+
+**Key Points**
+- Ensure the `**detail_url**` function is correctly defined to generate the URL for a specific recipe's detail view.
+- These tests comprehensively cover the scenarios of adding new tags, reassigning existing tags, and clearing tags
+from a recipe.
+- The `**format='json'**` parameter in the patch method call ensures that the request payload is correctly handled as
+JSON.
+
+These tests will help ensure that your recipe management functionality correctly handles the creation, assignment,
+and clearing of tags, which are critical aspects of a recipe-tag management system. Remember to run these tests
+after implementing the corresponding update functionality in your API to confirm that everything is working as intended.
+
+
+
+
+
+
+
+
+## Step 11. Implement update recipe tags feature
+
+Your implementation in `**recipe/serializers.py**` effectively adds the functionality to update a recipe's tags.
+You've correctly abstracted the tag handling logic into a separate method (**_get_or_create_tags**) and used it in
+both create and update methods. Here's a review of your implementation:
+
+Updated **RecipeSerializer** in recipe/serializers.py
+
+```python
+#recipe/serializers.py
+
+
+class RecipeSerializer(serializers.ModelSerializer):
+    """Serializer for recipes."""
+    tags = TagSerializer(many=True, required=False)
+    
+    # Others methods...
+    
+    def _get_or_create_tags(self, tags, recipe):
+        """Handle getting or creating tags as needed. """
+        auth_user = self.context['request'].user
+        for tag in tags:
+            tag_obj, created = Tag.objects.get_or_create(
+                user=auth_user,
+                **tag,
+            )
+            recipe.tags.add(tag_obj)
+            
+    def create(self, validated_data):
+        """Create a recipe."""
+        tags = validated_data.pop('tags', [])
+        recipe = Recipe.objects.create(**validated_data)
+        self._get_or_create_tags(tags, recipe)
+        
+        return recipe
+    
+    def update(self, instance, validated_data):
+        """Update recipe."""
+        tags = validated_data.pop('tags', None)
+        if tags is not None:
+            instance.tags.clear()
+            self._get_or_create_tags(tags, instance)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.save()
+        return instance
+```
+
+**Key Points and Suggestions**
+- The `**_get_or_create_tags**` method is a clean way to handle tag creation and association with the recipe. 
+It ensures that tags are either fetched or created and then added to the recipe.
+- In the `**update**` method, you're correctly checking if tags are provided in the request. If so, existing
+tags are cleared, and new ones are added. This approach allows for complete updating of the tags associated with a
+recipe.
+- Remember to handle edge cases where tag data might not be valid or where other fields of the recipe might
+fail to update.
+- Since the update method clears existing tags and adds new ones, it's important to ensure that this behavior is
+intended and clearly communicated to API users, as it replaces all existing tags with the new set provided.
+
+With this implementation, your API will support updating recipes' tags, enhancing the flexibility and usability
+of your recipe management system. This functionality allows users to maintain up-to-date and accurate tags for
+their recipes.
+
+____
+> **Commits:**
+>* https://github.com/stupns/recipe-app-api/commit/e65c165 (origin/br-8-build-tags-api) Builds tags API.
