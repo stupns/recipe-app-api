@@ -28,6 +28,7 @@ class ModelTests(TestCase):
 ```
 
 **Implement the Ingredient Model**
+
 In `**core/models.py**`, you'll define the `Ingredient` model and update the `**Recipe**` model to include a
 many-to-many relationship with **`Ingredient`**.
 ```python
@@ -93,6 +94,7 @@ It ensures that your API can correctly retrieve a list of ingredients and that i
 rules and user-specific data access. Here’s a breakdown of the tests you’ve outlined in `test_ingredients_api.py`:
 
 **Test for Public (Unauthenticated) API Access**
+
 This test verifies that authentication is required to access the ingredients list.
 ```python
 # recipe/tests/test_ingredients_api
@@ -130,6 +132,7 @@ class PublicIngredientApiTest(TestCase):
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
 ```
 **Test for Private (Authenticated) API Access**
+
 These tests ensure that authenticated users can retrieve a list of ingredients and that they only see their own
 ingredients.
 ```python
@@ -239,6 +242,7 @@ class IngredientViewSet(BaseRecipeAttrViewSet):
 ```
 
 **URL Configuration in recipe/urls.py**
+
 You update the URL configuration to include the IngredientViewSet, allowing API requests for ingredient data.
 
 ```python
@@ -600,6 +604,7 @@ class PrivateRecipeApiTests(TestCase):
 ```
 
 **Test for Assigning an Existing Ingredient on Recipe Update**
+
 This test checks if an existing ingredient can be assigned to a recipe during an update, and verifies that previously
 assigned ingredients are replaced.
 
@@ -620,6 +625,7 @@ assigned ingredients are replaced.
         self.assertNotIn(ingredient1, recipe.ingredients.all())
 ```
 **Test for Clearing Recipe Ingredients**
+
 This test ensures that all ingredients can be removed from a recipe.
 ```python
     def test_clear_recipe_ingredients(self):
