@@ -1,0 +1,701 @@
+[ <-- . Build Tags Api  ](Build%20Tags%20Api.md)
+# 6. Build Ingredients API
+After successfully implementing a Tags API, the next step in enhancing your recipe management application is to build
+an Ingredients API. This API will focus on managing ingredients associated with recipes, similar to how tags 
+were handled. The goal is to allow users to add, update, and manage various ingredients that make up their recipes.
+
+___
+## Step 1. Add ingredient model
+
+In core/tests/test_models.py, you'll add a test to ensure that the creation of an ingredient works as expected.
+
+```python
+#core/tests/test_model.py
+class ModelTests(TestCase):
+    """Test models."""
+    
+    # Other tests...
+    
+    def test_create_ingredient(self):
+        """Test creating an ingredient is successful."""
+        user = create_user()
+        ingredient = models.Ingredient.objects.create(
+            user=user,
+            name='Ingredient1',
+        )
+
+        self.assertEqual(str(ingredient), ingredient.name)
+```
+
+**Implement the Ingredient Model**
+In `**core/models.py**`, you'll define the `Ingredient` model and update the `**Recipe**` model to include a
+many-to-many relationship with **`Ingredient`**.
+```python
+#core/models.py
+class Recipe(models.Model):
+    """Recipe object."""
+    
+    # Other fields...
+    tags = models.ManyToManyField('Tag')
+    ingredients = models.ManyToManyField('Ingredient')
+
+    def __str__(self):
+        return self.title
+
+class Ingredient(models.Model):
+    """Ingredient for recipes."""
+    name = models.CharField(max_length=255)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+    )
+
+    def __str__(self):
+        return self.name
+```
+**Create Database Migrations**
+Run the migrations to update your database schema with the new Ingredient model:
+```commandline
+docker-compose run --rm app sh -c "python manage.py makemigrations"
+
+...
+core/migrations/0004_auto_20230924_1234.py
+    - Create model Ingredient
+    - Add field Ingredients to recipe
+```
+
+**Register Ingredient in Admin**
+
+In `**core/admin.py**`, register the `**Ingredient**` model to manage it via the Django admin interface.
+```python
+#core/admin.py
+
+# Other model registrations...
+admin.site.register(models.Ingredient)
+```
+
+**Notes and Considerations**
+
+- Ensure that the **`Ingredient`** model has a foreign key to the user to allow for user-specific ingredients.
+- The test for creating an ingredient verifies that the model is correctly set up and can be instantiated
+and saved to the database.
+- By adding ingredients as a many-to-many field in the **`Recipe`** model, you're allowing each recipe to 
+have multiple ingredients, and each ingredient can be part of multiple recipes.
+- After making these changes, run your tests to ensure that everything is working as expected.
+
+With these steps, you've successfully laid the groundwork for the Ingredients API, allowing for the creation and 
+management of ingredients in recipes.
+
+## Step 2. Writing Tests for Listing Ingredients
+
+In building your Ingredients API, writing tests for listing ingredients is a crucial step. 
+It ensures that your API can correctly retrieve a list of ingredients and that it adheres to authentication
+rules and user-specific data access. Here’s a breakdown of the tests you’ve outlined in `test_ingredients_api.py`:
+
+**Test for Public (Unauthenticated) API Access**
+This test verifies that authentication is required to access the ingredients list.
+```python
+# recipe/tests/test_ingredients_api
+
+from decimal import Decimal
+from django.test import TestCase
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+
+from rest_framework import status
+from rest_framework.test import APIClient
+
+from core.models import (
+    Ingredient,
+    Recipe,
+)
+from recipe.serializers import IngredientSerializer
+
+INGREDIENTS_URL = reverse('recipe:ingredient-list')
+
+def create_user(email='user@example.com', password='testpass123'):
+    """Create and return user."""
+    return get_user_model().objects.create_user(email=email, password=password)
+
+class PublicIngredientApiTest(TestCase):
+    """Test unauthenticated API requests."""
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_auth_required(self):
+        """Test auth is required for retrieving ingredients."""
+        res = self.client.get(INGREDIENTS_URL)
+
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+```
+**Test for Private (Authenticated) API Access**
+These tests ensure that authenticated users can retrieve a list of ingredients and that they only see their own
+ingredients.
+```python
+class PrivateIngredientsApiTests(TestCase):
+
+    def setUp(self):
+        self.user = create_user()
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_retrieve_ingredients(self):
+        """Test retrieving a list of ingredients."""
+        Ingredient.objects.create(user=self.user, name='Kale')
+        Ingredient.objects.create(user=self.user, name='Vanilla')
+
+        res = self.client.get(INGREDIENTS_URL)
+
+        ingredients = Ingredient.objects.all().order_by('-name')
+        serializer = IngredientSerializer(ingredients, many=True)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data, serializer.data)
+
+    def test_ingredients_limited_to_user(self):
+        """Test list of ingredients is limited to authenticated user."""
+        user2 = create_user(email='user2@example.com')
+        Ingredient.objects.create(user=user2, name='Salt')
+        ingredient = Ingredient.objects.create(user=self.user, name='Proper')
+
+        res = self.client.get(INGREDIENTS_URL)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 1)
+        self.assertEqual(res.data[0]['name'], ingredient.name)
+        self.assertEqual(res.data[0]['id'], ingredient.id)
+```
+
+**Key Points**
+
+- The `**test_auth_required**` method in `**PublicIngredientApiTest**` checks if the endpoint is properly secured 
+against unauthenticated access.
+- The `**test_retrieve_ingredients**` method in `**PrivateIngredientsApiTests**` checks if authenticated users can
+retrieve all their ingredients.
+- The `**test_ingredients_limited_to_user**` method ensures that users can only access their own ingredients, not those
+of other users.
+
+By implementing these tests, you ensure that your Ingredients API behaves correctly, both in terms of data
+retrieval and access control. This is essential for maintaining the integrity and privacy of user data in
+your application. Make sure to run these tests after implementing the corresponding API functionalities to
+confirm everything works as expected.
+
+## Step 3. Implement ingredient listing API
+
+our implementation for the Ingredient Listing API is well-organized and follows good software development
+practices by using a base viewset class. Here's how each part of your implementation works:
+
+**Ingredient Serializer in recipe/serializers.py**
+
+You define `**IngredientSerializer**` to handle the serialization and deserialization of ingredient data. This serializer
+will convert ingredient instances to and from JSON format for API requests and responses.
+
+```python
+# recipe/serializers.py
+
+from core.models import (
+    Recipe,
+    Tag,
+    Ingredient,
+)
+
+# Other classes ...
+
+class IngredientSerializer(serializers.ModelSerializer):
+    """Serializer for ingredients."""
+
+    class Meta:
+        model = Ingredient
+        fields = ['id', 'name']
+        read_only_fields = ['id']
+```
+
+**Base ViewSet for Recipe Attributes in recipe/views.py**
+
+You create a base viewset, `**BaseRecipeAttrViewSet**`, which other viewsets like `**IngredientViewSet**` can inherit 
+from. This base class includes common configurations like authentication and permission classes, and a method
+for filtering the queryset to the authenticated user.
+
+```python
+# recipe/views.py
+
+# Other classes ...
+
+class BaseRecipeAttrViewSet(mixins.ListModelMixin,
+                            viewsets.GenericViewSet):
+    """Base viewset for recipe attributes."""
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """Filter queryset to authenticated user."""
+        return self.queryset.filter(user=self.request.user).order_by('-name')
+
+class IngredientViewSet(BaseRecipeAttrViewSet):
+    """Manage ingredients in the database."""
+    serializer_class = serializers.IngredientSerializer
+    queryset = Ingredient.objects.all()
+```
+
+**URL Configuration in recipe/urls.py**
+You update the URL configuration to include the IngredientViewSet, allowing API requests for ingredient data.
+
+```python
+#recipe/urls.py
+
+# Other routes...
+router.register('ingredients', views.IngredientViewSet)
+```
+
+**Key Points**
+
+- The `**IngredientSerializer**` handles the data conversion for ingredient objects.
+- Using a base viewset (`**BaseRecipeAttrViewSet**`) for common attributes and methods is an efficient approach
+to avoid code duplication.
+- The `**IngredientViewSet**` inherits from `**BaseRecipeAttrViewSet**`, getting all the configurations
+and methods, and only needs to specify the `**serializer_class**` and **`queryset`**.
+- Your URL configuration in `**recipe/urls.py**` correctly sets up the route for accessing ingredient data.
+
+With this setup, your Ingredient Listing API should work effectively, providing authenticated users the ability to 
+retrieve their own list of ingredients. Remember to test this implementation to ensure everything is working as 
+intended.
+
+## Step 4. Write tests for updating ingredients
+
+You are correctly setting up tests for updating ingredients in your Ingredients API. These tests are essential for
+ensuring that your API supports updating ingredient details. Let's review the test case you've outlined:
+
+**Test for Updating an Ingredient**
+
+This test verifies the functionality of updating an existing ingredient's name through a PATCH request.
+
+```python
+#recipe/tests/test_ingredients_api.py
+
+# Other imports...
+
+def detail_url(ingredient_id):
+    """Create and return an ingredient detail URL."""
+    return reverse('recipe:ingredient-detail', args=[ingredient_id])
+
+class PrivateIngredientsApiTests(TestCase):
+
+    # Other tests...
+
+    def test_update_ingredient(self):
+        """Test updating an ingredient."""
+        ingredient = Ingredient.objects.create(user=self.user, name='Cilantro')
+
+        payload = {'name': 'Coriander'}
+        url = detail_url(ingredient.id)
+        res = self.client.patch(url, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        ingredient.refresh_from_db()
+        self.assertEqual(ingredient.name, payload['name'])
+    
+```
+
+**Key Points**
+
+- The `**detail_url**` function generates the URL for a specific ingredient's detail view.
+Ensure the URL name `**recipe:ingredient-detail**` matches the one defined in your URL configurations.
+- The `**test_update_ingredient**` method checks if an ingredient can be updated successfully.
+It creates an ingredient, updates its name, and verifies if the update was reflected in the database.
+- The use of **`patch`** method in the test case indicates a partial update, which is typical for updating
+a single or a few fields in an API resource.
+
+With this test, you'll be able to confirm that your Ingredients API allows authenticated users to update existing
+ingredients. After implementing the corresponding update functionality in your API view, running this test will
+help ensure that everything works as expected.
+
+## Step 5. Implementing Update Ingredient API
+
+To enable the update functionality in your Ingredients API, you've made a great decision to extend
+the **`BaseRecipeAttrViewSet`** with **`mixins.UpdateModelMixin`**. This mixin provides the necessary actions to
+handle update (PUT and PATCH) requests. Here's how your updated **`BaseRecipeAttrViewSet`** will look in **views.py:**
+
+```python
+class BaseRecipeAttrViewSet(mixins.UpdateModelMixin,
+                            mixins.ListModelMixin,
+                            viewsets.GenericViewSet):
+    """Base viewset for recipe attributes."""
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+```
+
+**Key Points**
+
+- The **`BaseRecipeAttrViewSet`** now includes **`mixins.UpdateModelMixin`**, which provides the necessary functionality
+to update ingredient instances.
+- The **`IngredientViewSet`** inherits from **`BaseRecipeAttrViewSet`**, receiving both list and update capabilities.
+- The **`get_queryset`** method ensures that users only access and modify their own ingredients, maintaining data
+privacy and integrity.
+- Authentication and permission classes are specified to ensure that only authenticated users can access
+and modify the ingredient data.
+
+With this implementation, your API now supports updating ingredients, allowing users to modify existing
+ingredient details. Remember to test this new functionality with the test cases you've written to ensure
+that it behaves as expected and maintains the necessary security constraints.
+
+## Step 6. Write tests for deleting ingredients
+Your test for deleting ingredients is a key component in ensuring the robustness of your Ingredients API.
+This test verifies that ingredients can be successfully removed from the database, and it's essential for 
+maintaining the integrity and accuracy of your application's data. Here's a closer look at the test case you've
+outlined:
+
+**Test for Deleting an Ingredient**
+
+This test checks whether an authenticated user can delete an ingredient and verifies that the ingredient is
+indeed removed from the database.
+```python
+#recipe/tests/test_ingredients_api.py
+
+# Other imports...
+
+class PrivateIngredientsApiTests(TestCase):
+
+    # Other tests...
+
+    def test_delete_ingredient(self):
+        """Test deleting ingredient."""
+        ingredient = Ingredient.objects.create(user=self.user, name='Lettuce')
+        url = detail_url(ingredient.id)
+        res = self.client.delete(url)
+
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        ingredients = Ingredient.objects.filter(user=self.user)
+        self.assertFalse(ingredients.exists())
+```
+
+**Key Points**
+
+- The detail_url function generates the URL for a specific ingredient's detail view. Ensure that the
+URL name recipe:ingredient-detail matches the one defined in your URL configurations.
+- The test_delete_ingredient method tests the deletion functionality by making a DELETE request to the ingredient's
+detail URL and then verifying that the ingredient no longer exists in the database.
+- This test ensures that your API correctly handles deletion requests and maintains data integrity by removing the
+specified ingredient.
+
+
+By implementing and running this test, you can confirm that your Ingredients API allows authenticated users to
+delete ingredients. This functionality is crucial for users who need to manage or correct their ingredient
+lists. After adding the corresponding delete functionality in your API view, make sure to test this feature
+to ensure it's working as intended.
+
+## Step 7. Implement delete ingredients API
+
+Enhancing the **`BaseRecipeAttrViewSet`** with **`mixins.DestroyModelMixin`** is an excellent way to implement the
+delete functionality for ingredients in your Ingredients API. This mixin provides the necessary support to
+handle DELETE requests, enabling the deletion of ingredient instances.
+
+**Updated BaseRecipeAttrViewSet in recipe/views.py**
+
+```python
+class BaseRecipeAttrViewSet(mixins.UpdateModelMixin,
+                            mixins.DestroyModelMixin,  # <- Update this mixins
+                            mixins.ListModelMixin,
+                            viewsets.GenericViewSet):
+    """Base viewset for recipe attributes."""
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+```
+
+**Key Points**
+
+- The **`BaseRecipeAttrViewSet`** now includes **`mixins.`****`DestroyModelMixin`** along with **`UpdateModelMixin`** 
+and **`ListModelMixin`**, providing a full range of CRUD (Create, Read, Update,Delete) operations for recipe attributes.
+- The **`IngredientViewSet`** inherits from **`BaseRecipeAttrViewSet`**, which means it automatically gets the
+functionality to handle list, update, and delete operations.
+- The **`get_queryset`** method ensures that users only interact with their own ingredients, maintaining data privacy
+and integrity.
+- Authentication (**`TokenAuthentication`**) and permission (**`IsAuthenticated`**) classes are specified to
+ensure that only authenticated users can interact with ingredient data.
+
+With this implementation, your API now supports the deletion of ingredients, allowing users to manage their 
+ingredient lists effectively. This is a critical functionality for users who need to update or clean up their lists.
+Make sure to test this new feature to confirm that it works as expected and adheres to your application's security and
+data integrity standards.
+
+## Step 8. Writing Tests for Creating Recipes with Ingredients
+
+The tests you've written for creating recipes with new and existing ingredients are crucial for ensuring that your API
+correctly handles ingredient data. These tests check whether your API can handle the addition of ingredients to
+recipes during the recipe creation process. Let's break down these tests:
+
+**Test for Creating a Recipe with New Ingredients**
+
+This test verifies if a recipe can be created with new ingredients. It sends a payload containing a recipe and new 
+ingredient names, then checks if the recipe and ingredients are correctly created and associated.
+
+```python
+#recipe/tests/test_recipe_api
+
+# Other imports...
+
+class PrivateRecipeApiTests(TestCase):
+    """Test authenticated API requests."""
+    
+    # Other tests...
+    
+    def test_create_recipe_with_new_ingredients(self):
+        """Test creating a recipe with new ingredients."""
+        payload = {
+            'title': 'Cauliflower Tacos',
+            'time_minutes': 60,
+            'price': Decimal('4.30'),
+            'ingredients': [{'name': 'Cauliflower'}, {'name': 'Salt'}],
+        }
+        res = self.client.post(RECIPES_URL, payload, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        recipes = Recipe.objects.filter(user=self.user)
+        self.assertEqual(recipes.count(), 1)
+        recipe = recipes[0]
+        self.assertEqual(recipe.ingredients.count(), 2)
+        for ingredient in payload['ingredients']:
+            exists = recipe.ingredients.filter(
+                name=ingredient['name'],
+                user=self.user,
+            ).exists()
+            self.assertTrue(exists)
+```
+**Test for Creating a Recipe with Existing Ingredient**
+
+This test checks if a recipe can be created using existing ingredients. It ensures that the API doesn't create duplicate
+ingredients and correctly associates them with the recipe.
+```python
+    def test_create_recipe_with_existing_ingredient(self):
+        """Test creating a new recipe with existing ingredient."""
+        ingredient = Ingredient.objects.create(user=self.user, name='Lemon')
+        payload = {
+            'title': 'Vietnamese Soup',
+            'time_minutes': 25,
+            'price': Decimal('2.55'),
+            'ingredients': [{'name': 'Lemon'}, {'name': 'Fish Sauce'}],
+        }
+        res = self.client.post(RECIPES_URL, payload, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        recipes = Recipe.objects.filter(user=self.user)
+        self.assertEqual(recipes.count(), 1)
+        recipe = recipes[0]
+        self.assertEqual(recipe.ingredients.count(), 2)
+        self.assertIn(ingredient, recipe.ingredients.all())
+        for ingredient in payload['ingredients']:
+            exists = recipe.ingredients.filter(
+                name=ingredient['name'],
+                user=self.user,
+            ).exists()
+            self.assertTrue(exists)
+```
+
+**Key Points**
+
+- Ensure that **`RECIPES_URL`** is correctly defined, pointing to your recipe creation endpoint.
+- The **`format='json'`** parameter in the `post` method call ensures that the request payload is correctly handled as 
+JSON.
+- These tests will validate whether your API can handle the creation of recipes with both new and existing ingredients,
+which is a fundamental part of ingredient management in recipes.
+
+By implementing these tests, you will ensure that your API behaves correctly when handling recipes with ingredients,
+thereby maintaining the integrity and functionality of your recipe management system. Remember to run these tests after
+implementing the corresponding API functionalities to confirm that everything is working as expected.
+
+## Step 9. Implementing Create Ingredients Feature
+
+Your implementation in **`recipe/serializers.py`** effectively adds the functionality to create and associate 
+ingredients with recipes during the recipe creation process. You've successfully incorporated the handling
+of both tags and ingredients into the **`RecipeSerializer`**. Here's a review of your implementation:
+
+**Updated `RecipeSerializer` in `recipe/serializers.py`**
+
+```python
+# recipe/serializers.py
+
+# Other imports 
+
+# Other classes
+
+
+class RecipeSerializer(serializers.ModelSerializer):
+    """Serializer for recipes."""
+    tags = TagSerializer(many=True, required=False)
+    ingredients = IngredientSerializer(many=True, required=False)
+
+    class Meta:
+        model = Recipe
+        fields = [
+            'id', 'title', 'time_minutes', 'price', 'link', 'tags',
+            'ingredients',
+        ]
+        read_only_fields = ['id']
+
+    # Other methods
+
+    def _get_or_create_ingredients(self, ingredients, recipe):
+        """Handle getting or creating ingredients as needed."""
+        auth_user = self.context['request'].user
+        for ingredient in ingredients:
+            ingredient_obj, created = Ingredient.objects.get_or_create(
+                user=auth_user,
+                **ingredient,
+            )
+            recipe.ingredients.add(ingredient_obj)
+
+    def create(self, validated_data):
+        """Create a recipe."""
+        tags = validated_data.pop('tags', [])
+        ingredients = validated_data.pop('ingredients', [])
+        recipe = Recipe.objects.create(**validated_data)
+        self._get_or_create_tags(tags, recipe)
+        self._get_or_create_ingredients(ingredients, recipe)
+        return recipe
+```
+
+**Key Points and Suggestions**
+
+- The **`tags`** and **`ingredients`** fields are correctly set up to handle lists of tags and ingredients, using their 
+respective serializers for each item in the lists.
+- The **`_get_or_create_ingredients`** method is an efficient way to either fetch existing ingredients or create new ones
+and then associate them with the recipe.
+- This method uses **`get_or_create`** to avoid creating duplicate ingredients for the same user and adds these
+ingredients to the recipe.
+- The **`create`** method is responsible for handling the creation of a recipe and its associated tags and ingredients.
+It correctly extracts tags and ingredients data from `**validated_data**`, creates a recipe instance, and then 
+associates the tags and ingredients with it.
+
+## Step 10. Write tests for updating recipe ingredients feature
+
+You have outlined comprehensive tests for the feature of updating recipe ingredients in your API. 
+These tests are crucial for ensuring the correct functionality of adding, reassigning, and clearing ingredients in
+a recipe. Let's examine each of these tests:
+
+**Test for Creating an Ingredient on Recipe Update**
+
+This test verifies whether a new ingredient can be added to a recipe during an update operation.
+
+```python
+#recipe/tests/test_recipe_api
+
+# Other imports...
+
+class PrivateRecipeApiTests(TestCase):
+    """Test authenticated API requests."""
+    
+    # Other tests...
+    
+    def test_create_ingredient_on_update(self):
+        """Test creating an ingredient when updating a recipe."""
+        recipe = create_recipe(user=self.user)
+
+        payload = {'ingredients': [{'name': 'Limes'}]}
+        url = detail_url(recipe.id)
+        res = self.client.patch(url, payload, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        new_ingredient = Ingredient.objects.get(user=self.user, name='Limes')
+        self.assertIn(new_ingredient, recipe.ingredients.all())
+```
+
+**Test for Assigning an Existing Ingredient on Recipe Update**
+This test checks if an existing ingredient can be assigned to a recipe during an update, and verifies that previously
+assigned ingredients are replaced.
+
+```python
+    def test_update_recipe_assign_ingredient(self):
+        """Test assigning an existing ingredient when updating a recipe."""
+        ingredient1 = Ingredient.objects.create(user=self.user, name='Pepper')
+        recipe = create_recipe(user=self.user)
+        recipe.ingredients.add(ingredient1)
+
+        ingredient2 = Ingredient.objects.create(user=self.user, name='Chili')
+        payload = {'ingredients': [{'name': 'Chili'}]}
+        url = detail_url(recipe.id)
+        res = self.client.patch(url, payload, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn(ingredient2, recipe.ingredients.all())
+        self.assertNotIn(ingredient1, recipe.ingredients.all())
+```
+**Test for Clearing Recipe Ingredients**
+This test ensures that all ingredients can be removed from a recipe.
+```python
+    def test_clear_recipe_ingredients(self):
+        """Test clearing a recipes ingredients."""
+        ingredient = Ingredient.objects.create(user=self.user, name='Garlic')
+        recipe = create_recipe(user=self.user)
+        recipe.ingredients.add(ingredient)
+
+        payload = {'ingredients': []}
+        url = detail_url(recipe.id)
+        res = self.client.patch(url, payload, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(recipe.ingredients.count(), 0)
+    
+```
+
+**Key Points**
+
+- Ensure the **`detail_url`** function generates the correct URL for a recipe's detail view.
+- The tests comprehensively cover the scenarios of adding new ingredients, reassigning existing ingredients, and
+clearing all ingredients from a recipe.
+- Using **`format='json'`** in the `**patch**` and `**post**` requests ensures that the data is sent in JSON format.
+
+These tests will help validate that your API correctly handles the updating of ingredients in recipes, which
+is an essential aspect of recipe management. After implementing the corresponding update functionality in your API,
+run these tests to ensure everything is working as expected.
+
+## Step 11. Implementing Update Recipe Ingredients Feature
+
+Your implementation in `**recipe/serializers.py**` effectively adds the functionality to update a recipe's tags and
+ingredients. This approach ensures that the recipe can be updated with new sets of tags and ingredients, thereby
+enhancing the flexibility of your recipe management system. Here's a review of your implementation:
+
+**Updated RecipeSerializer in recipe/serializers.py**
+```python
+#recipe/serializers.py
+
+class RecipeSerializer(serializers.ModelSerializer):
+    """Serializer for recipes."""
+    tags = TagSerializer(many=True, required=False)
+    ingredients = IngredientSerializer(many=True, required=False)
+    
+    # Other methods
+
+    def update(self, instance, validated_data):
+        """Update recipe."""
+        tags = validated_data.pop('tags', None)
+        ingredients = validated_data.pop('ingredients', None)
+        if tags is not None:
+            instance.tags.clear()
+            self._get_or_create_tags(tags, instance)
+        if ingredients is not None:
+            instance.ingredients.clear()
+            self._get_or_create_ingredients(ingredients, instance)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.save()
+        return instance
+```
+
+**Key Points and Suggestions**
+
+- Handling Tags and Ingredients: The update method now handles both tags and ingredients. It clears the existing tags
+and ingredients and then adds the new ones provided in the request.
+- Flexibility: This implementation allows for a high degree of flexibility. Users can completely change the tags
+and ingredients associated with a recipe.
+- Data Integrity: Clearing and re-adding tags and ingredients might be a heavy operation in terms of database queries.
+It's an effective approach but ensure that it aligns with your application's performance requirements.
+- Error Handling: Make sure to handle potential errors or edge cases, such as invalid tag or ingredient data.
+
+With this implementation, your API now supports comprehensive updating of recipes, including their associated tags
+and ingredients. This feature significantly enhances the usability and flexibility of your recipe management system.
+
+____
+> **Commits:**
+>* https://github.com/stupns/recipe-app-api/commit/13dd790 (origin/br-9-build-ingredients-api) Build igredients api.
