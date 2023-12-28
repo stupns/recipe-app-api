@@ -144,9 +144,6 @@ providing users with a more tailored and efficient way to find recipes. This fea
 recipe applications where users often look for recipes based on available ingredients or dietary preferences.
 Be sure to test this feature thoroughly to ensure the filtering works correctly and efficiently.
 
-
-
-
 ## Step 3. Adding Tests for Filtering Tags and Ingredients
 
 To ensure the functionality and reliability of your filtering feature in the Recipe API, you're adding tests
