@@ -704,4 +704,4 @@ and ingredients. This feature significantly enhances the usability and flexibili
 
 ____
 > **Commits:**
->* https://github.com/stupns/recipe-app-api/commit/13dd790 (origin/br-9-build-ingredients-api) Build igredients api.
+>* https://github.com/stupns/recipe-app-api/commit/13dd790 (origin/br-9-build-ingredients-api) Build ingredients api.

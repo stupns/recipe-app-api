@@ -1,0 +1,399 @@
+[ <-- . Build Ingredients API  ](Build%20Ingredients%20API.md)
+# 7. Recipe Image API
+
+Building a Recipe Image API involves adding support for handling image data, which is crucial for a feature-rich recipe
+application. This step involves integrating image handling dependencies into your application.
+
+## Step 1. Adding Image Handling Dependencies
+
+**Updating the Dockerfile**
+
+In the Dockerfile, you need to add dependencies necessary for handling JPEG images and other image formats. This 
+typically involves adding image libraries like **jpeg-dev** and **zlib**.
+
+Here's how you update your Dockerfile:
+
+```yaml
+# Other lines
+
+...
+RUN python -m venv /py && \
+    /py/bin/pip install --upgrade pip && \
+    apk add --update --no-cache postgresql-client jpeg-dev && \           <- jpeg-dev
+    apk add --update --no-cache --virtual .tmp-build-deps \
+    build-base postgresql-dev musl-dev zlib zlib-dev linux-headers && \   <- zlib
+```
+
+**Adding Pillow to Requirements**
+
+Pillow is a Python Imaging Library that adds support for opening, manipulating, and saving many different image 
+file formats. It's a crucial dependency for handling images in Python applications.
+
+Update your **requirements.txt** file to include Pillow:
+
+```text
+Pillow>=8.2.0,<8.3.0
+```
+
+**Building the Docker Image**
+
+After updating the Dockerfile and the requirements, you need to rebuild your Docker image to include these new 
+dependencies.
+
+Run the following command in your terminal:
+
+```commandline
+docker-compose build
+```
+
+**Key Points**
+
+- **JPEG and zlib**: These libraries are essential for handling JPEG images and compression, which are common
+requirements in image processing.
+- **Pillow**: This library is widely used in Python applications for image processing tasks. It's robust and supports
+a wide range of image formats.
+- **Rebuilding the Docker Image**: It's crucial to rebuild your Docker image to ensure that these new dependencies are
+correctly installed in your Docker environment.
+
+With these updates, your application will be equipped to handle image data, paving the way for features like uploading 
+images for recipes, which can significantly enhance the user experience in your recipe application.
+
+## Step 2. Configuring Project for Static Files
+
+To handle image files effectively in your Django project, you need to configure it to manage static and media files 
+properly. This setup involves adjustments to your Docker configuration, **docker-compose.yml**, and Django settings.
+
+**Updating the Dockerfile**
+
+In the Dockerfile, create directories for media and static files and set the appropriate permissions. 
+This step ensures that your application has designated places to store these files.
+
+Here's the update to your Dockerfile:
+```yaml
+# Other lines...
+
+    adduser \
+        --disabled-password \
+        --no-create-home \
+        django-user && \
+    mkdir -p /vol/web/media && \
+    mkdir -p /vol/web/static && \
+    chown -R django-user:django-user /vol && \
+    chmod -R 755 /vol && \
+```
+After updating, rebuild your Docker image:
+
+```commandline
+docker-compose build
+```
+**Updating docker-compose.yml**
+
+In your **docker-compose.yml**, define volumes for static and media data. This step is crucial for data persistence and
+to ensure that your media files are not lost when Docker containers are restarted or rebuilt.
+```yaml
+
+# Other lines...
+
+services:
+  # Configuration for your services...
+  -
+    volumes:
+      - ./app:/app
+      - dev-static-data:/vol/web
+
+# Other lines...
+volumes:
+  dev-db-data:
+  dev-static-data:
+```
+
+**Updating Django Settings**
+
+Configure Django settings to handle static and media files. This includes setting the URLs and the root 
+directories for static and media files.
+
+In **settings.py**:
+```python
+# settings.py
+
+# Other settings...
+STATIC_URL = '/static/static/'
+MEDIA_URL = '/static/media/'
+
+MEDIA_ROOT = '/vol/web/media'
+STATIC_ROOT = '/vol/web/static'
+```
+
+**Configuring URL Patterns for Media Files**
+
+In **app/app/urls.py**, add URL patterns for serving media files in development. This is necessary for Django to
+serve media files during development.
+
+```python
+# app/app/urls.py
+from django.conf import settings
+from django.conf.urls.static import static
+# Existing URL patterns...
+
+if settings.DEBUG:
+    urlpatterns += static(
+        settings.MEDIA_URL,
+        document_root=settings.MEDIA_ROOT,
+    )
+```
+
+**Key Points**
+
+- **Dockerfile Setup**: Creating and setting permissions for the /vol/web/media and /vol/web/static directories ensure 
+that Django has the necessary directories to store media and static files.
+- **Volumes in docker-compose.yml**: Defining volumes for static and media files ensures that these files are persisted
+outside the Docker containers.
+- **Django Settings**: Setting **MEDIA_URL**, **MEDIA_ROOT**, **STATIC_URL**, and **STATIC_ROOT** configures Django to
+correctly handle media and static files.
+- **Media Files URL Pattern**: Adding URL patterns for media files in development mode allows Django to serve these files
+while developing locally.
+
+With these configurations in place, your Django application will be able to handle static and media files effectively,
+which is crucial for the Recipe Image API and any other features involving file uploads or static content.
+
+## Step 3. Modifying the Recipe Model to Include Image Handling
+
+To support image uploads for recipes, you need to modify the Recipe model to include an image field. This step involves
+creating a function to generate a file path for each new image and updating the Recipe model to use this function.
+
+**Writing a Test for Image File Path Generation**
+
+In **core/tests/test_models.py**, write a test to ensure that the image file path is generated correctly. 
+This test will mock UUID generation to predict the output file path.
+
+```python
+# core/tests/test_module.py
+from unittest.mock import patch
+
+class ModelTests(TestCase):
+    """Test models."""
+    
+    # Other tests...
+    
+    @patch('core.models.uuid.uuid4')
+    def test_recipe_file_name_uuid(self, mock_uuid):
+        """Test generating image path."""
+        uuid = 'test-uuid'
+        mock_uuid.return_value = uuid
+        file_path = models.recipe_image_file_path(None, 'example.jpg')
+
+        self.assertEqual(file_path, f'uploads/recipe/{uuid}.jpg')
+```
+
+**Modifying the Recipe Model**
+
+In **app/core/models.py**, define a function `recipe_image_file_path` to generate a unique file path for each recipe image.
+Also, add an image field to the Recipe model using this function for the `upload_to` argument.
+
+```python
+# app/core/models.py
+
+import uuid
+import os
+
+def recipe_image_file_path(instance, filename):
+    """Generate file path for new recipe image."""
+    ext = os.path.splitext(filename)[1]
+    filename = f'{uuid.uuid4()}{ext}'
+
+    return os.path.join('uploads', 'recipe', filename)
+
+class Recipe(models.Model):  
+    # other fields...
+    image = models.ImageField(null=True, upload_to=recipe_image_file_path)
+
+```
+**Creating Database Migrations**
+
+After updating the model, create new migrations to reflect these changes in your database schema:
+```commandline
+docker-compose run --rm sh -c "python manage.py makemigrations"
+```
+
+**Key Points**
+
+- **Image File Path Generation**: The `recipe_image_file_path` function uses UUIDs to generate a unique file path for 
+each image, preventing filename conflicts.
+- **Testing Path Generation**: The test mocks the UUID generation to check if the function creates the correct file path.
+- **Updating Recipe Model**: By adding an ImageField to the Recipe model and specifying
+`recipe_image_file_path` for `upload_to`, you're enabling image uploads for recipes.
+- **Migrations**: Running migrations updates the database schema to include the new image field in the Recipe model.
+
+With these changes, your Recipe model now supports image uploads, a crucial step in enhancing the functionality
+of your recipe management application. This allows users to add visual elements to their recipes, making the
+application more engaging and user-friendly.
+
+## Step 4. Writing Tests for Uploading Images
+
+To ensure that your Recipe Image API works correctly, writing tests for image upload functionality is essential.
+These tests will verify that images can be uploaded to recipes and handle cases where the upload is invalid.
+
+**Test for Uploading an Image**
+
+This test checks if an image can be successfully uploaded to a recipe and verifies if the image is saved correctly.
+
+```python
+#recipe/tests/test_recipe_api.py
+
+import tempfile
+import os
+
+from PIL import Image
+
+def image_upload_url(recipe_id):
+    """Create and return a recipe detail URL."""
+    return reverse('recipe:recipe-upload-image', args=[recipe_id])
+
+class ImageUploadTests(TestCase):
+    """Tests for the image upload API."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = create_user(
+            email='user@example.com',
+            password='password123'
+        )
+        self.client.force_authenticate(self.user)
+        self.recipe = create_recipe(user=self.user)
+
+    def tearDown(self):
+        self.recipe.image.delete()
+
+    def test_upload_image(self):
+        """Test uploading an image to a recipe."""
+        url = image_upload_url(self.recipe.id)
+        with tempfile.NamedTemporaryFile(suffix='.jpg') as image_file:
+            img = Image.new('RGB', (10, 10))
+            img.save(image_file, format='JPEG')
+            image_file.seek(0)
+            payload = {'image': image_file}
+            res = self.client.post(url, payload, format='multipart')
+
+        self.recipe.refresh_from_db()
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('image', res.data)
+        self.assertTrue(os.path.exists(self.recipe.image.path))
+```
+**Test for Uploading an Invalid Image**
+
+This test ensures that the API handles invalid image uploads correctly by returning a 400 Bad Request response.
+
+```python
+    def test_upload_image_bad_request(self):
+        """Test uploading invalid image."""
+        url = image_upload_url(self.recipe.id)
+        payload = {'image': 'notanimage'}
+        res = self.client.post(url, payload, format='multipart')
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+```
+
+**Key Points**
+
+- **Temporary Image File**: The `test_upload_image` test creates a temporary image file using Python's `tempfile` and
+`PIL` libraries. This image is then uploaded to the server.
+- **Testing Image Upload**: The test verifies that the image upload increases the count of images, returns a success
+status code, and the path of the uploaded image exists.
+- **Invalid Image Test**: The `test_upload_image_bad_request` checks that the API returns a 400 status code when an 
+invalid image is uploaded.
+
+With these tests, you can ensure that your image uploading functionality works as intended and is robust enough to 
+handle both valid and invalid requests. Remember to implement the corresponding API view to handle image uploads and 
+run these tests to confirm everything is functioning correctly.
+
+
+
+
+## Step 5. Implementing the Image API
+
+You're now ready to implement the image uploading functionality in your Recipe API. This involves creating a serializer
+for handling image data and adding an action to your RecipeViewSet to manage image uploads.
+
+**Recipe Image Serializer**
+
+First, create a **RecipeImageSerializer** in `app/recipe/serializers.py`. This serializer is specifically designed
+for handling image uploads associated with recipes.
+```python
+#app/recipe/serializers.py
+
+class RecipeImageSerializer(serializers.ModelSerializer):
+    """Serializer for uploading images to recipes."""
+
+    class Meta:
+        model = Recipe
+        fields = ['id', 'image']
+        read_only = ['id']
+        extra_kwargs = {'image': {'required': 'True'}}
+
+```
+
+**Updating the Recipe ViewSet**
+
+Next, update the **RecipeViewSet** in `app/recipe/views.py` to include the image upload functionality.
+You will add a custom action to handle POST requests for image uploads.
+
+```python
+#app/recipe/views.py
+
+from rest_framework.response import Response
+
+class RecipeViewSet(viewsets.ModelViewSet):
+    # Existing configurations...
+
+    def get_serializer_class(self):
+        """Return the serializer class for request."""
+        if self.action == 'list':
+            return serializers.RecipeSerializer
+        elif self.action == 'upload_image':
+            return serializers.RecipeImageSerializer
+
+        return self.serializer_class
+
+    @action(methods=['POST'], detail=True, url_path='upload-image')
+    def upload_image(self, request, pk=None):
+        """Upload an image to recipe."""
+        recipe = self.get_object()
+        serializer = self.get_serializer(recipe, data=request.data)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+```
+
+**Updating Settings for Swagger Documentation**
+
+Finally, if you're using `drf-spectacular` for Swagger documentation, you might need to adjust **SPECTACULAR_SETTINGS**
+in **settings.py** to split request components correctly.
+
+```python
+# settings.py
+
+SPECTACULAR_SETTINGS = {
+    'COMPONENT_SPLIT_REQUEST': True,
+}
+
+```
+
+**Key Points**
+
+- **RecipeImageSerializer**: Manages the serialization and validation of image data.
+- **Custom Action in RecipeViewSet**: The `upload_image` method handles the logic for uploading images. It uses 
+the **RecipeImageSerializer** to validate the uploaded image.
+- **Swagger Documentation Settings**: The `COMPONENT_SPLIT_REQUEST` setting in `SPECTACULAR_SETTINGS` helps handle
+documentation for APIs with different request methods properly.
+
+With these implementations, your Recipe API now supports image uploading, significantly enhancing its functionality.
+Users can now attach images to their recipes, making the application more interactive and visually appealing.
+Be sure to test this feature thoroughly to ensure it works smoothly.
+
+____
+> **Commits:**
+>* https://github.com/stupns/recipe-app-api/commit/90dec8c (origin/br-10-recipe-image-api) Created recipe image api.
+>* https://github.com/stupns/recipe-app-api/commit/8037114 Created recipe image api.
