@@ -1,0 +1,294 @@
+[ <-- Recipe Image API ](Recipe%20Image%20API.md)
+# 8. Filtering recipe API
+
+## Step 1. Add tests for fltering recipes
+To enhance the functionality of your Recipe API, adding the ability to filter recipes by tags and ingredients is a 
+significant step. It allows users to efficiently find recipes that match their dietary preferences or ingredient
+availability. Here, you'll start by writing tests to ensure that this filtering works as expected.
+
+**Testing Filter by Tags**
+
+This test verifies that the API can filter recipes based on tags. It involves creating recipes with different tags and 
+then making a request to the API with tag filter parameters.
+```python
+# recipe/tests/test_recipe_api.py
+
+class PrivateRecipeApiTests(TestCase):
+    """Test authenticated API requests."""
+
+    # Other tests...
+    def test_filter_by_tags(self):
+        """Test filtering recipes by tags."""
+        r1 = create_recipe(user=self.user, title='Thai Vegetable Curry')
+        r2 = create_recipe(user=self.user, title='Aubergine with Tahini')
+        tag1 = Tag.objects.create(user=self.user, name='Vegan')
+        tag2 = Tag.objects.create(user=self.user, name='Vegetarian')
+        r1.tags.add(tag1)
+        r2.tags.add(tag2)
+        r3 = create_recipe(user=self.user, title='Fish and chips')
+
+        params = {'tags': f'{tag1.id},{tag2.id}'}
+        res = self.client.get(RECIPES_URL, params)
+
+        s1 = RecipeSerializer(r1)
+        s2 = RecipeSerializer(r2)
+        s3 = RecipeSerializer(r3)
+        self.assertIn(s1.data, res.data)
+        self.assertIn(s2.data, res.data)
+        self.assertNotIn(s3.data, res.data)
+```
+**Testing Filter by Ingredients**
+
+This test checks if the API can filter recipes based on ingredients. It involves creating recipes with different
+ingredients and then making a request to the API with ingredient filter parameters.
+
+```python
+    def test_filter_by_ingredients(self):
+        """Test filtering recipes by ingredients."""
+        r1 = create_recipe(user=self.user, title='Posh Beans on Toast')
+        r2 = create_recipe(user=self.user, title='Chicken Cacciatore')
+        in1 = Ingredient.objects.create(user=self.user, name='Feta Cheese')
+        in2 = Ingredient.objects.create(user=self.user, name='Chicken')
+        r1.ingredients.add(in1)
+        r2.ingredients.add(in2)
+        r3 = create_recipe(user=self.user, title='Red Lentil Daal')
+
+        params = {'ingredients': f'{in1.id}, {in2.id}'}
+        res = self.client.get(RECIPES_URL, params)
+
+        s1 = RecipeSerializer(r1)
+        s2 = RecipeSerializer(r2)
+        s3 = RecipeSerializer(r3)
+        self.assertIn(s1.data, res.data)
+        self.assertIn(s2.data, res.data)
+        self.assertNotIn(s3.data, res.data)
+```
+
+**Key Points**
+
+- **Filtering Logic**: These tests verify that the API correctly filters recipes based on tags and ingredients.
+- **Setup and Teardown**: The setUp method initializes the test client and user, while the `tearDown` method (if needed)
+can handle any cleanup.
+- **Asserting Responses**: The tests assert that the recipes with specified tags and ingredients are included in the
+response, and those without are not.
+
+These tests are crucial for ensuring that your filtering functionality works correctly and meets user expectations.
+Once these tests pass, you can be confident that your API provides useful and accurate filtering capabilities.
+
+## Step 2. Implementing Recipe Filter Feature
+
+To enhance the functionality of your Recipe API, you're implementing a feature that allows users to filter recipes
+based on tags and ingredients. This involves modifying the **RecipeViewSet** to handle query parameters for
+tags and ingredients.
+
+**Updating RecipeViewSet in recipe/views.py**
+
+Your RecipeViewSet now needs to include logic for parsing query parameters and filtering the queryset based on these
+parameters. The @extend_schema_view decorator is used for OpenAPI documentation, specifying the query parameters
+for the list action.
+
+```python
+# recipe/views.py
+
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[
+            OpenApiParameter(
+                'tags',
+                OpenApiTypes.STR,
+                description='Comma separated list of tags IDs to filter',
+            ),
+            OpenApiParameter(
+                'ingredients',
+                OpenApiTypes.STR,
+                description='Comma separated list of ingredient IDs to filter',
+            )
+        ]
+    )
+)
+
+class RecipeViewSet(viewsets.ModelViewSet):
+    # Other configurations...
+
+    def _params_to_ints(self, qs):
+        """Convert a list of strings to integers."""
+        return [int(str_id) for str_id in qs.split(',')]
+    
+        def get_queryset(self):
+        """Retrieve recipes for authenticated user."""
+        tags = self.request.query_params.get('tags')
+        ingredients = self.request.query_params.get('ingredients')
+        queryset = self.queryset
+        if tags:
+            tag_ids = self._params_to_ints(tags)
+            queryset = queryset.filter(tags__id__in=tag_ids)
+        if ingredients:
+            ingredient_ids = self._params_to_ints(ingredients)
+            queryset = queryset.filter(ingredients__id__in=ingredient_ids)
+
+        return queryset.filter(
+            user=self.request.user
+        ).order_by('-id').distinct()
+
+```
+**Key Points**
+- **Parameter Parsing**: The `_params_to_ints` method converts a comma-separated string of numbers (like "1,2,3")
+into a list of integers. This is used for parsing the tag and ingredient IDs from the query parameters.
+- **Filtering the QuerySet**: The `get_queryset` method is modified to filter recipes based on the provided
+tag and ingredient IDs. It uses Django's ORM to filter recipes that have the specified tags and ingredients.
+- **OpenAPI Schema Customization**: The `@extend_schema_view` and `@extend_schema` decorators from
+`drf_spectacular` are used to document the custom query parameters for filtering in the API's schema.
+
+With this implementation, your Recipe API now supports filtering by tags and ingredients,
+providing users with a more tailored and efficient way to find recipes. This feature is especially useful in 
+recipe applications where users often look for recipes based on available ingredients or dietary preferences.
+Be sure to test this feature thoroughly to ensure the filtering works correctly and efficiently.
+
+
+
+
+## Step 3. Adding Tests for Filtering Tags and Ingredients
+
+To ensure the functionality and reliability of your filtering feature in the Recipe API, you're adding tests
+for filtering tags and ingredients assigned to recipes. These tests will validate that the API correctly filters
+and returns unique lists of tags and ingredients based on their assignment to recipes.
+
+**Testing Filtering Ingredients Assigned to Recipes**
+
+This test checks whether the API correctly lists ingredients that are assigned to recipes and excludes those that
+are not.
+
+```python
+#recipe/tests/test_ingredients_api.py
+
+from core.models import (
+    Ingredient,
+    Recipe,
+)
+
+
+class PrivateIngredientsApiTests(TestCase):
+    # Other setup methods...
+    
+    def test_filter_ingredients_assigned_to_recipes(self):
+        """Test listening ingredients by those assigned to recipes."""
+        in1 = Ingredient.objects.create(user=self.user, name='Apples')
+        in2 = Ingredient.objects.create(user=self.user, name='Turkey')
+        recipe = Recipe.objects.create(
+            title='Apple Crumble',
+            time_minutes=5,
+            price=Decimal('4.50'),
+            user=self.user,
+        )
+        recipe.ingredients.add(in1)
+
+        res = self.client.get(INGREDIENTS_URL, {'assigned_only': 1})
+
+        s1 = IngredientSerializer(in1)
+        s2 = IngredientSerializer(in2)
+        self.assertIn(s1.data, res.data)
+        self.assertNotIn(s2.data, res.data)
+```
+**Testing Unique Filtered Ingredients**
+
+This test verifies that when filtering ingredients assigned to recipes, each ingredient is listed only once,
+regardless of how many recipes it's assigned to.
+
+```python
+    def test_filtered_ingredients_unique(self):
+        """Test filtered ingredients returns a unique list."""
+        ing = Ingredient.objects.create(user=self.user, name='Eggs')
+        Ingredient.objects.create(user=self.user, name='Lentils')
+        recipe1 = Recipe.objects.create(
+            title='Eggs Benedict',
+            time_minutes=60,
+            price=Decimal('7.50'),
+            user=self.user,
+        )
+        recipe2 = Recipe.objects.create(
+            title='Herbs Eggs',
+            time_minutes=20,
+            price=Decimal('4.50'),
+            user=self.user,
+        )
+        recipe1.ingredients.add(ing)
+        recipe2.ingredients.add(ing)
+
+        res = self.client.get(INGREDIENTS_URL, {'assigned_only': 1})
+
+        self.assertEqual(len(res.data), 1)
+
+```
+**Testing Filtering Tags Assigned to Recipes**
+
+Similar to the tests for ingredients, you're checking if the API can filter tags based on their assignment to recipes.
+```python
+#recipe/tests/test_tags_api.py
+
+from decimal import Decimal
+
+class PrivateTagsApiTests(TestCase):
+    # Other tests...
+
+    def test_filter_tags_assigned_to_recipes(self):
+        """Test listing tags to those assigned to recipes."""
+        tag1 = Tag.objects.create(user=self.user, name='Breakfast')
+        tag2 = Tag.objects.create(user=self.user, name='Lunch')
+        recipe = Recipe.objects.create(
+            title='Green egs on Toast',
+            time_minutes=10,
+            price=Decimal('2.50'),
+            user=self.user,
+        )
+        recipe.tags.add(tag1)
+
+        res = self.client.get(TAGS_URL, {'assigned_only': 1})
+
+        s1 = TagSerializer(tag1)
+        s2 = TagSerializer(tag2)
+        self.assertIn(s1.data, res.data)
+        self.assertNotIn(s2.data, res.data)
+```
+**Testing Unique Filtered Tags**
+
+This test ensures that when filtering tags assigned to recipes, each tag is listed only once.
+
+```python
+    def test_filtered_tags_unique(self):
+        """Test filtered tags returns a unique list."""
+        tag = Tag.objects.create(user=self.user, name='Breakfast')
+        Tag.objects.create(user=self.user, name='Dinner')
+        recipe1 = Recipe.objects.create(
+            title='Pancakes',
+            time_minutes=5,
+            price=Decimal('5.50'),
+            user=self.user,
+        )
+        recipe2 = Recipe.objects.create(
+            title='Porridge',
+            time_minutes=15,
+            price=Decimal('2.00'),
+            user=self.user,
+        )
+        recipe1.tags.add(tag)
+        recipe2.tags.add(tag)
+
+        res = self.client.get(TAGS_URL, {'assigned_only': 1})
+
+        self.assertEqual(len(res.data), 1)
+```
+
+**Key Points**
+
+- These tests ensure that your API can filter and list tags and ingredients assigned to recipes, which is crucial for
+users looking for recipes based on specific criteria.
+- The tests for uniqueness verify that the filtered lists do not contain duplicate entries, ensuring data integrity and
+ease of use in the frontend application.
+
+Running these tests will validate the robustness and accuracy of your filtering feature, enhancing the overall
+functionality of your recipe management application.
+
+____
+> **Commits:**
+>* https://github.com/stupns/recipe-app-api/commit/afa01e1 (origin/br-11-implement-filtering) Add implement filtering.
+>* https://github.com/stupns/recipe-app-api/commit/b492e13 Add implement filtering.
