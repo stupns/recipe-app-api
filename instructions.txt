@@ -36,7 +36,7 @@ chmod 400 aws_id_rsa
 ssh -i "aws_id_rsa" ec2-user@ec2-18-189-193-100.us-east-2.compute.amazonaws.com
 
 _______
-ssh ec2-user@3.139.233.207
+ssh ec2-user@18.222.194.81
 
 *inside server console*
 ssh-keygen -t ed25519 -b 4096
